@@ -8,7 +8,7 @@ const axios = require('axios');
 const DOUBAO_CONFIG = {
   // 使用火山引擎方舟大模型API
   baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-  model: 'doubao-pro-32k-240815', // 豆包pro 32K模型
+  model: 'ep-20260303114824-tfhrx', // 豆包pro 32K模型
 };
 
 // 系统提示词 - 让AI扮演财经小白导师
