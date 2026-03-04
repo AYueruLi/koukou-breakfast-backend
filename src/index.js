@@ -160,51 +160,35 @@ app.post('/api/news/refresh', async (req, res) => {
 });
 
 // ========== 文章解读接口 ==========
-// 获取文章内容并生成AI解读
+// 获取文章内容并生成AI解读 - 改进版
 app.post('/api/news/analyze', async (req, res) => {
   try {
     const { url, title } = req.body;
-
-    if (!url && !title) {
-      return res.status(400).json({ success: false, error: 'URL或标题不能为空' });
-    }
+    if (!url && !title) { return res.status(400).json({ success: false, error: 'URL或标题不能为空' }); }
 
     let articleContent = '';
 
-    // 尝试抓取文章内容
     if (url) {
       try {
         const response = await axios.get(url, {
           timeout: 10000,
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          }
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
         });
-
-        // 简单的HTML解析，提取文本内容
         const cheerio = require('cheerio');
         const $ = cheerio.load(response.data);
-
-        // 移除脚本和样式
-        $('script, style, nav, header, footer, aside').remove();
-
-        // 提取主要内容
-        articleContent = $('article, .article-content, .content, .post-content, main, #article, .text').text();
-
-        // 如果还是空的，就获取所有段落
-        if (!articleContent || articleContent.length < 100) {
-          articleContent = $('p').map((i, el) => $(el).text()).get().join('\n');
+        $('script, style, nav, header, footer, aside, .advertisement, .ad, .sidebar, .comments, .related').remove();
+        
+        const contentSelectors = ['article', '.article-content', '.article-text', '.content', '.post-content', '.news-content', 'main', '#article', '.text', '.article-body'];
+        for (const selector of contentSelectors) {
+          const content = $(selector).text();
+          if (content && content.length > 200) { articleContent = content; break; }
         }
-
-        // 清理内容
-        articleContent = articleContent.replace(/\s+/g, ' ').trim().substring(0, 3000);
-      } catch (e) {
-        console.log('抓取文章内容失败:', e.message);
-        articleContent = '';
-      }
+        if (!articleContent || articleContent.length < 100) { articleContent = $('p').map((i, el) => $(el).text()).get().join('\n'); }
+        articleContent = articleContent.replace(/\s+/g, ' ').replace(/^\s+|\s+$/g, '').substring(0, 3000);
+        if (articleContent.length < 50) { articleContent = ''; }
+      } catch (e) { console.log('抓取文章内容失败:', e.message); articleContent = ''; }
     }
 
-    // 使用AI生成解读
     const apiKey = process.env.ARK_API_KEY;
     let aiAnalysis = null;
 
@@ -212,75 +196,60 @@ app.post('/api/news/analyze', async (req, res) => {
       try {
         const prompt = `你叫"扣扣AI助手"，是专门帮助财经小白理解复杂财经新闻的AI助手。
 
-请根据以下新闻标题生成三个方面的简短解读：
-1. 这是什么意思？（用通俗易懂的语言解释新闻含义）
-2. 为什么会这样？（简要说明原因和背景）
-3. 跟我有什么关系？（说明对普通人的影响）
+请根据以下新闻标题生成详细的解读。我需要你用最通俗易懂的语言解释，因为读者是完全不懂财经的普通人。
 
 新闻标题：${title}
-${articleContent ? '新闻内容：' + articleContent.substring(0, 1000) : ''}
+${articleContent ? '新闻内容摘要：' + articleContent.substring(0, 1500) : ''}
 
-请用简洁易懂的语言回答，每个问题回答50-100字。`;
+请严格按照以下格式回答（每部分50-150字）：
+
+【这是什么意思？】
+（用通俗易懂的语言解释这条新闻在说什么）
+
+【为什么会这样？】
+（解释这条新闻发生的背景和原因）
+
+【跟我有什么关系？】
+（说明这条新闻对普通人（老百姓）的影响，比如对钱包、工作、生活的影响）`;
 
         const response = await axios.post(
           `${DOUBAO_CONFIG.baseURL}/chat/completions`,
           {
             model: DOUBAO_CONFIG.model,
             messages: [
-              { role: 'system', content: '你是一个财经新闻解读助手，用通俗易懂的语言帮助普通人理解财经新闻。' },
+              { role: 'system', content: '你是一个财经新闻解读助手，用通俗易懂的语言帮助普通人理解财经新闻。你的特点是：用生活化的比喻解释专业术语，强调对普通人的影响，回答简洁明了。' },
               { role: 'user', content: prompt }
             ],
             temperature: 0.7,
-            max_tokens: 1000
+            max_tokens: 1500
           },
           {
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${apiKey.replace(/export\s+ARK_API_KEY=|["']/g, '')}`
-            },
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey.replace(/export\s+ARK_API_KEY=|["']/g, '')}` },
             timeout: 30000
           }
         );
 
         if (response.data && response.data.choices && response.data.choices.length > 0) {
           const aiText = response.data.choices[0].message.content;
+          const meaningMatch = aiText.match(/【这是什么意思？】([\s\S]*?)(?=【|$)/);
+          const reasonMatch = aiText.match(/【为什么会这样？】([\s\S]*?)(?=【|$)/);
+          const impactMatch = aiText.match(/【跟我有什么关系？】([\s\S]*?)$/);
 
-          // 解析AI回答，提取三个方面
-          const meaningMatch = aiText.match(/什么意思[：:]\s*([^\n]+)/);
-          const reasonMatch = aiText.match(/为什么[会这样|这样]?[：:]\s*([^\n]+)/);
-          const impactMatch = aiText.match(/什么关系[：:]|跟我有关[：:]\s*([^\n]+)/);
-
-          aiAnalysis = {
-            meaning: meaningMatch ? meaningMatch[1].trim() : '点击下方AI助手了解更多详情',
-            reason: reasonMatch ? reasonMatch[1].trim() : '点击下方AI助手了解更多详情',
-            impact: impactMatch ? impactMatch[1].trim() : '点击下方AI助手了解更多详情'
-          };
-
-          // 如果解析失败，直接返回原始回答作为content
-          if (!meaningMatch && !reasonMatch) {
+          if (meaningMatch && reasonMatch && impactMatch) {
             aiAnalysis = {
-              meaning: aiText.substring(0, 200),
-              reason: '点击下方AI助手了解更多详情',
-              impact: '点击下方AI助手了解更多详情'
+              meaning: meaningMatch[1].trim().substring(0, 300),
+              reason: reasonMatch[1].trim().substring(0, 300),
+              impact: impactMatch[1].trim().substring(0, 300)
             };
+          } else {
+            aiAnalysis = { meaning: aiText.substring(0, 300), reason: '点击下方AI助手了解更多详情', impact: '点击下方AI助手了解更多详情' };
           }
         }
-      } catch (e) {
-        console.log('AI解读生成失败:', e.message);
-      }
+      } catch (e) { console.log('AI解读生成失败:', e.message); }
     }
 
-    res.json({
-      success: true,
-      data: {
-        content: articleContent || `这是一篇关于"${title}"的财经新闻。点击"阅读原文"查看完整内容。`,
-        aiAnalysis: aiAnalysis
-      }
-    });
-  } catch (error) {
-    console.error('文章分析错误:', error.message);
-    res.status(500).json({ success: false, error: error.message });
-  }
+    res.json({ success: true, data: { content: articleContent || `这是一篇关于"${title}"的财经新闻。点击"阅读原文"查看完整内容。`, aiAnalysis: aiAnalysis } });
+  } catch (error) { console.error('文章分析错误:', error.message); res.status(500).json({ success: false, error: error.message }); }
 });
 
 // ========== 定时任务 ==========
