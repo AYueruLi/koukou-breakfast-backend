@@ -11,7 +11,7 @@ const cheerio = require('cheerio');
 // 豆包API配置
 const DOUBAO_CONFIG = {
   baseURL: 'https://ark.cn-beijing.volces.com/api/v3',
-  model: 'doubao-pro-32k-240815',
+  model: 'ep-20260303114824-tfhrx',
 };
 
 // 内存存储
