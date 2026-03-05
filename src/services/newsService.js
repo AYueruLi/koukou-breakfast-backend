@@ -36,7 +36,7 @@ function isAntiCrawlError(error, response) {
   // 检测常见的反爬特征
   if (response) {
     const status = response.status;
-    const data = response.data || '';
+    const data = response.data;
     const headers = response.headers || {};
 
     // 状态码检测
@@ -44,18 +44,18 @@ function isAntiCrawlError(error, response) {
       return true;
     }
 
-    // 内容检测
+    // 内容检测 - 确保data是字符串
+    const dataStr = typeof data === 'string' ? data : JSON.stringify(data || '');
     const antiKeywords = ['访问频率过快', '请稍后再试', '验证码', ' captcha', 'block', 'blocked', '限制访问', '禁止访问', 'Forbidden', 'Too Many Requests'];
-    if (typeof data === 'string') {
-      for (const keyword of antiKeywords) {
-        if (data.toLowerCase().includes(keyword.toLowerCase())) {
-          return true;
-        }
+    
+    for (const keyword of antiKeywords) {
+      if (dataStr.toLowerCase().includes(keyword.toLowerCase())) {
+        return true;
       }
     }
 
     // 检查是否返回空内容或错误页面
-    if (data.length < 500 && data.includes('<!DOCTYPE') || data.includes('<html')) {
+    if (dataStr.length < 500 && (dataStr.includes('<!DOCTYPE') || dataStr.includes('<html'))) {
       return true;
     }
   }
