@@ -36,7 +36,8 @@ function isAntiCrawlError(error, response) {
   // 检测常见的反爬特征
   if (response) {
     const status = response.status;
-    const data = response.data;
+    // 确保data是字符串类型
+    const data = typeof response.data === 'string' ? response.data : JSON.stringify(response.data || '');
     const headers = response.headers || {};
 
     // 状态码检测
@@ -44,18 +45,18 @@ function isAntiCrawlError(error, response) {
       return true;
     }
 
-    // 内容检测 - 确保data是字符串
-    const dataStr = typeof data === 'string' ? data : JSON.stringify(data || '');
+    // 内容检测
     const antiKeywords = ['访问频率过快', '请稍后再试', '验证码', ' captcha', 'block', 'blocked', '限制访问', '禁止访问', 'Forbidden', 'Too Many Requests'];
-    
-    for (const keyword of antiKeywords) {
-      if (dataStr.toLowerCase().includes(keyword.toLowerCase())) {
-        return true;
+    if (typeof data === 'string') {
+      for (const keyword of antiKeywords) {
+        if (data.toLowerCase().includes(keyword.toLowerCase())) {
+          return true;
+        }
       }
     }
 
     // 检查是否返回空内容或错误页面
-    if (dataStr.length < 500 && (dataStr.includes('<!DOCTYPE') || dataStr.includes('<html'))) {
+    if (data.length < 500 && (data.includes('<!DOCTYPE') || data.includes('<html'))) {
       return true;
     }
   }
@@ -893,6 +894,101 @@ function getFallbackNews(category) {
       { id: 'fallback_intl_14', title: '美债收益率攀升 债券市场承压', url: 'https://www.wallstreetcn.com/articles/2026-03-05/us-bond-yield-rise', source: '华尔街见闻', publishTime: now.toISOString() },
       { id: 'fallback_intl_15', title: '全球AI热潮持续 科技股领涨', url: 'https://xueqiu.com/S/NVDA', source: '雪球', publishTime: now.toISOString() }
     ];
+  }
+}
+
+// ============================================
+// AI生成内容 - 自动生成500+字摘要和300+字解读
+// ============================================
+async function generateContentAndAnalysis(newsItem) {
+  const apiKey = process.env.ARK_API_KEY;
+
+  if (!apiKey) {
+    console.log('⚠️ AI API Key未配置，使用默认内容');
+    return {
+      content: `关于"${newsItem.title}"的详细报道。`,
+      analysis: `【这是什么意思？】该新闻值得关注。\n【为什么会这样？】请查看原文了解详情。\n【跟我有什么关系？】建议关注相关领域动态。`
+    };
+  }
+
+  // 清理API Key
+  const cleanApiKey = apiKey.replace(/export\s+ARK_API_KEY=|["']/g, '');
+
+  const prompt = `你是一位专业的财经新闻编辑。请根据以下新闻标题，生成：
+1. 500字以上的新闻摘要（content）
+2. 300字以上的AI解读（analysis），包含三个部分：
+   - 【这是什么意思？】
+   - 【为什么会这样？】
+   - 【跟我有什么关系？】
+
+新闻标题：${newsItem.title}
+新闻来源：${newsItem.source}
+
+请用通俗易懂的语言解释，适合财经小白理解。
+
+请严格按照以下格式返回：
+---
+CONTENT: [500字以上的新闻摘要]
+ANALYSIS: [300字以上的AI解读，包含上述三个部分]
+---`;
+
+  try {
+    const response = await axios.post(
+      'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+      {
+        model: 'ep-20260303114824-tfhrx',
+        messages: [
+          { role: 'system', content: '你是一位专业的财经新闻编辑，擅长用通俗易懂的语言解释财经新闻。' },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 4000
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${cleanApiKey}`
+        },
+        timeout: 60000
+      }
+    );
+
+    if (response.data && response.data.choices && response.data.choices.length > 0) {
+      const result = response.data.choices[0].message.content;
+
+      // 解析结果
+      let content = '';
+      let analysis = '';
+
+      const contentMatch = result.match(/CONTENT:([\s\S]*?)(?:ANALYSIS:|$)/);
+      const analysisMatch = result.match(/ANALYSIS:([\s\S]*?)$/);
+
+      if (contentMatch) {
+        content = contentMatch[1].trim();
+      }
+      if (analysisMatch) {
+        analysis = analysisMatch[1].trim();
+      }
+
+      // 如果解析失败，使用默认格式
+      if (!content) {
+        content = result.replace(/ANALYSIS:[\s\S]*?$/, '').trim();
+      }
+      if (!analysis) {
+        analysis = `【这是什么意思？】该新闻值得关注。\n【为什么会这样？】请查看原文了解详情。\n【跟我有什么关系？】建议关注相关领域动态。`;
+      }
+
+      console.log(`✅ AI生成成功: ${newsItem.title.substring(0, 20)}...`);
+      return { content, analysis };
+    }
+
+    throw new Error('AI返回格式错误');
+  } catch (error) {
+    console.log(`❌ AI生成失败: ${error.message}`);
+    return {
+      content: `关于"${newsItem.title}"的详细报道。`,
+      analysis: `【这是什么意思？】该新闻值得关注。\n【为什么会这样？】请查看原文了解详情。\n【跟我有什么关系？】建议关注相关领域动态。`
+    };
   }
 }
 
