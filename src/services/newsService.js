@@ -898,8 +898,61 @@ function getFallbackNews(category) {
 }
 
 // ============================================
-// AI生成内容 - 自动生成500+字摘要和300+字解读
+// AI生成内容 - 带重试和延迟机制
 // ============================================
+
+// 延迟函数 - 避免API速率限制
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+// 带重试的AI调用
+async function callAIWithRetry(prompt, apiKey, maxRetries = 3) {
+  const cleanApiKey = apiKey.replace(/export\s+ARK_API_KEY=|["']/g, '');
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const response = await axios.post(
+        'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
+        {
+          model: 'ep-20260303114824-tfhrx',
+          messages: [
+            { role: 'system', content: '你是一位专业的财经新闻编辑，擅长用通俗易懂的语言解释财经新闻。' },
+            { role: 'user', content: prompt }
+          ],
+          temperature: 0.7,
+          max_tokens: 4000
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${cleanApiKey}`
+          },
+          timeout: 60000
+        }
+      );
+
+      if (response.data && response.data.choices && response.data.choices.length > 0) {
+        return response.data.choices[0].message.content;
+      }
+
+      throw new Error('AI返回格式错误');
+    } catch (error) {
+      const status = error.response?.status;
+
+      // 如果是速率限制(429)，等待后重试
+      if (status === 429 && attempt < maxRetries) {
+        const waitTime = attempt * 2000; // 2秒、4秒、6秒
+        console.log(`⏳ API速率限制，等待 ${waitTime/1000}秒后重试...`);
+        await delay(waitTime);
+        continue;
+      }
+
+      // 其他错误直接抛出
+      throw error;
+    }
+  }
+  throw new Error('AI重试次数用尽');
+}
+
 async function generateContentAndAnalysis(newsItem) {
   const apiKey = process.env.ARK_API_KEY;
 
@@ -910,9 +963,6 @@ async function generateContentAndAnalysis(newsItem) {
       analysis: `【这是什么意思？】该新闻值得关注。\n【为什么会这样？】请查看原文了解详情。\n【跟我有什么关系？】建议关注相关领域动态。`
     };
   }
-
-  // 清理API Key
-  const cleanApiKey = apiKey.replace(/export\s+ARK_API_KEY=|["']/g, '');
 
   const prompt = `你是一位专业的财经新闻编辑。请根据以下新闻标题，生成：
 1. 500字以上的新闻摘要（content）
@@ -933,56 +983,32 @@ ANALYSIS: [300字以上的AI解读，包含上述三个部分]
 ---`;
 
   try {
-    const response = await axios.post(
-      'https://ark.cn-beijing.volces.com/api/v3/chat/completions',
-      {
-        model: 'ep-20260303114824-tfhrx',
-        messages: [
-          { role: 'system', content: '你是一位专业的财经新闻编辑，擅长用通俗易懂的语言解释财经新闻。' },
-          { role: 'user', content: prompt }
-        ],
-        temperature: 0.7,
-        max_tokens: 4000
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${cleanApiKey}`
-        },
-        timeout: 60000
-      }
-    );
+    const result = await callAIWithRetry(prompt, apiKey);
 
-    if (response.data && response.data.choices && response.data.choices.length > 0) {
-      const result = response.data.choices[0].message.content;
+    // 解析结果
+    let content = '';
+    let analysis = '';
 
-      // 解析结果
-      let content = '';
-      let analysis = '';
+    const contentMatch = result.match(/CONTENT:([\s\S]*?)(?:ANALYSIS:|$)/);
+    const analysisMatch = result.match(/ANALYSIS:([\s\S]*?)$/);
 
-      const contentMatch = result.match(/CONTENT:([\s\S]*?)(?:ANALYSIS:|$)/);
-      const analysisMatch = result.match(/ANALYSIS:([\s\S]*?)$/);
-
-      if (contentMatch) {
-        content = contentMatch[1].trim();
-      }
-      if (analysisMatch) {
-        analysis = analysisMatch[1].trim();
-      }
-
-      // 如果解析失败，使用默认格式
-      if (!content) {
-        content = result.replace(/ANALYSIS:[\s\S]*?$/, '').trim();
-      }
-      if (!analysis) {
-        analysis = `【这是什么意思？】该新闻值得关注。\n【为什么会这样？】请查看原文了解详情。\n【跟我有什么关系？】建议关注相关领域动态。`;
-      }
-
-      console.log(`✅ AI生成成功: ${newsItem.title.substring(0, 20)}...`);
-      return { content, analysis };
+    if (contentMatch) {
+      content = contentMatch[1].trim();
+    }
+    if (analysisMatch) {
+      analysis = analysisMatch[1].trim();
     }
 
-    throw new Error('AI返回格式错误');
+    // 如果解析失败，使用默认格式
+    if (!content) {
+      content = result.replace(/ANALYSIS:[\s\S]*?$/, '').trim();
+    }
+    if (!analysis) {
+      analysis = `【这是什么意思？】该新闻值得关注。\n【为什么会这样？】请查看原文了解详情。\n【跟我有什么关系？】建议关注相关领域动态。`;
+    }
+
+    console.log(`✅ AI生成成功: ${newsItem.title.substring(0, 20)}...`);
+    return { content, analysis };
   } catch (error) {
     console.log(`❌ AI生成失败: ${error.message}`);
     return {
@@ -1010,7 +1036,7 @@ async function updateAllNews() {
     // 为每条新闻生成content和analysis
     console.log('🤖 开始生成新闻摘要和AI解读...');
 
-    // 国内新闻生成
+    // 国内新闻生成 - 每条之间添加延迟避免速率限制
     for (let i = 0; i < domestic.length; i++) {
       const news = domestic[i];
       console.log(`国内 - 生成 ${i + 1}/${domestic.length}: ${news.title}`);
@@ -1021,11 +1047,15 @@ async function updateAllNews() {
       } catch (e) {
         console.log(`生成失败，使用默认内容`);
         domestic[i].content = `关于"${news.title}"的详细报道。`;
-        domestic[i].analysis = `该新闻值得关注。`;
+        domestic[i].analysis = `【这是什么意思？】该新闻值得关注。\n【为什么会这样？】请查看原文了解详情。\n【跟我有什么关系？】建议关注相关领域动态。`;
+      }
+      // 每条新闻之间延迟1.5秒，避免API速率限制
+      if (i < domestic.length - 1) {
+        await delay(1500);
       }
     }
 
-    // 国际新闻生成
+    // 国际新闻生成 - 每条之间添加延迟避免速率限制
     for (let i = 0; i < international.length; i++) {
       const news = international[i];
       console.log(`国际 - 生成 ${i + 1}/${international.length}: ${news.title}`);
@@ -1036,7 +1066,11 @@ async function updateAllNews() {
       } catch (e) {
         console.log(`生成失败，使用默认内容`);
         international[i].content = `关于"${news.title}"的详细报道。`;
-        international[i].analysis = `该新闻值得关注。`;
+        international[i].analysis = `【这是什么意思？】该新闻值得关注。\n【为什么会这样？】请查看原文了解详情。\n【跟我有什么关系？】建议关注相关领域动态。`;
+      }
+      // 每条新闻之间延迟1.5秒，避免API速率限制
+      if (i < international.length - 1) {
+        await delay(1500);
       }
     }
 
