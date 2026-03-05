@@ -201,10 +201,14 @@ async function generateContentAndAnalysis(newsItem) {
 
 要求：
 1. content（新闻摘要）：基于标题生成一段500字以上的新闻摘要，包含新闻背景、核心数据、关键结论。要忠实于标题，不要虚构内容。
-2. analysis（AI解读）：基于content生成300字以上的精准解读，包含事件影响、市场分析、趋势判断。要求语言通俗易懂，对普通人有实际指导意义。
+2. analysis（AI解读）：基于content生成一段300字以上的精准解读，然后分成三部分：
+   【这是什么意思？】+解读内容
+   【为什么会这样？】+解读内容
+   【跟我有什么关系？】+解读内容
+要求语言通俗易懂，对普通人有实际指导意义。
 
 请严格按照以下JSON格式输出（不要有其他任何内容）：
-{"content":"这里是500字以上的新闻摘要...","analysis":"这里是300字以上的AI解读..."}`;
+{"content":"这里是500字以上的新闻摘要...","analysis":"【这是什么意思？】...【为什么会这样？】...【跟我有什么关系？】..."}`;
 
     const response = await axios.post(
       `${DOUBAO_CONFIG.baseURL}/chat/completions`,
@@ -537,39 +541,39 @@ function getFallbackNews(category) {
 
   if (category === 'domestic') {
     return [
-      { id: 'fallback_1', title: 'A股市场今日走势分化 结构性行情延续', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_2', title: '央行货币政策操作平稳 流动性合理充裕', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_3', title: '两会对金融市场影响解读 专家观点汇总', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_4', title: '房地产政策持续优化 市场信心逐步恢复', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_5', title: '科技板块表现活跃 AI相关概念股受关注', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_6', title: '新能源汽车销量增长 比亚迪销量领先', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() },
-      { id: 'fallback_7', title: '芯片半导体国产化提速 产业链迎来机遇', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_8', title: '银行理财收益率回升 投资者关注', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() },
-      { id: 'fallback_9', title: '国内消费市场回暖 零售数据向好', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_10', title: '基建投资发力 重大项目集中开工', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_11', title: '科创板持续活跃 科技创新受追捧', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() },
-      { id: 'fallback_12', title: '人民币汇率稳定 跨境资金流动平稳', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_13', title: '保险资金入市 资本市场增量资金可期', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() },
-      { id: 'fallback_14', title: '制造业PMI回升 经济复苏态势明显', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_15', title: '新能源汽车出口增长 中国制造走向全球', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() }
+      { id: 'fallback_1', title: 'A股市场今日走势分化 结构性行情延续', url: 'https://www.wallstreetcn.com/articles/2026-03-05/abc-market-divergence', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_2', title: '央行货币政策操作平稳 流动性合理充裕', url: 'https://www.wallstreetcn.com/articles/2026-03-05/pboc-monetary-policy', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_3', title: '两会对金融市场影响解读 专家观点汇总', url: 'https://www.wallstreetcn.com/articles/2026-03-05/two-sessions-financial-impact', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_4', title: '房地产政策持续优化 市场信心逐步恢复', url: 'https://www.wallstreetcn.com/articles/2026-03-05/property-policy-optimization', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_5', title: '科技板块表现活跃 AI相关概念股受关注', url: 'https://www.wallstreetcn.com/articles/2026-03-05/tech-sector-ai-stocks', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_6', title: '新能源汽车销量增长 比亚迪销量领先', url: 'https://xueqiu.com/S/SH600594', source: '雪球', publishTime: now.toISOString() },
+      { id: 'fallback_7', title: '芯片半导体国产化提速 产业链迎来机遇', url: 'https://www.wallstreetcn.com/articles/2026-03-05/semiconductor-localization', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_8', title: '银行理财收益率回升 投资者关注', url: 'https://xueqiu.com/S/SH000001', source: '雪球', publishTime: now.toISOString() },
+      { id: 'fallback_9', title: '国内消费市场回暖 零售数据向好', url: 'https://www.wallstreetcn.com/articles/2026-03-05/consumption-market-recovery', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_10', title: '基建投资发力 重大项目集中开工', url: 'https://www.wallstreetcn.com/articles/2026-03-05/infrastructure-investment', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_11', title: '科创板持续活跃 科技创新受追捧', url: 'https://xueqiu.com/S/SH688001', source: '雪球', publishTime: now.toISOString() },
+      { id: 'fallback_12', title: '人民币汇率稳定 跨境资金流动平稳', url: 'https://www.wallstreetcn.com/articles/2026-03-05/cny-exchange-rate', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_13', title: '保险资金入市 资本市场增量资金可期', url: 'https://xueqiu.com/S/SH601319', source: '雪球', publishTime: now.toISOString() },
+      { id: 'fallback_14', title: '制造业PMI回升 经济复苏态势明显', url: 'https://www.wallstreetcn.com/articles/2026-03-05/manufacturing-pmi-recovery', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_15', title: '新能源汽车出口增长 中国制造走向全球', url: 'https://xueqiu.com/S/SZ002594', source: '雪球', publishTime: now.toISOString() }
     ];
   } else {
     return [
-      { id: 'fallback_intl_1', title: '美股三大指数涨跌不一 科技股走势分化', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_2', title: '美联储主席暗示降息节奏放缓 市场关注', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_3', title: '欧洲股市全线上涨 奢侈品板块领跑', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_4', title: '日元汇率创新低 出口企业受益明显', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_5', title: '黄金价格突破历史新高 避险情绪升温', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() },
-      { id: 'fallback_intl_6', title: '苹果发布新品 供应链公司受关注', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_7', title: '特斯拉财报超预期 股价上涨', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() },
-      { id: 'fallback_intl_8', title: 'WTI原油价格下跌 OPEC+减产影响', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_9', title: '英伟达发布新品 AI芯片领域再突破', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_10', title: '德国股市创新高 欧洲经济复苏', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_11', title: '美元指数走强 外汇市场波动', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() },
-      { id: 'fallback_intl_12', title: '韩国股市领涨 半导体板块强劲', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_13', title: '国际金价上涨 央行购金持续', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() },
-      { id: 'fallback_intl_14', title: '美债收益率攀升 债券市场承压', url: 'https://www.wallstreetcn.com', source: '华尔街见闻', publishTime: now.toISOString() },
-      { id: 'fallback_intl_15', title: '全球AI热潮持续 科技股领涨', url: 'https://xueqiu.com', source: '雪球', publishTime: now.toISOString() }
+      { id: 'fallback_intl_1', title: '美股三大指数涨跌不一 科技股走势分化', url: 'https://www.wallstreetcn.com/articles/2026-03-05/us-stock-market-divergence', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_2', title: '美联储主席暗示降息节奏放缓 市场关注', url: 'https://www.wallstreetcn.com/articles/2026-03-05/fed-powell-rate-cut-hint', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_3', title: '欧洲股市全线上涨 奢侈品板块领跑', url: 'https://www.wallstreetcn.com/articles/2026-03-05/european-stock-rise', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_4', title: '日元汇率创新低 出口企业受益明显', url: 'https://www.wallstreetcn.com/articles/2026-03-05/yen-exchange-rate-low', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_5', title: '黄金价格突破历史新高 避险情绪升温', url: 'https://xueqiu.com/S/XAUUSD', source: '雪球', publishTime: now.toISOString() },
+      { id: 'fallback_intl_6', title: '苹果发布新品 供应链公司受关注', url: 'https://www.wallstreetcn.com/articles/2026-03-05/apple-new-product', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_7', title: '特斯拉财报超预期 股价上涨', url: 'https://xueqiu.com/S/TSLA', source: '雪球', publishTime: now.toISOString() },
+      { id: 'fallback_intl_8', title: 'WTI原油价格下跌 OPEC+减产影响', url: 'https://www.wallstreetcn.com/articles/2026-03-05/wti-oil-price-drop', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_9', title: '英伟达发布新品 AI芯片领域再突破', url: 'https://www.wallstreetcn.com/articles/2026-03-05/nvidia-new-product', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_10', title: '德国股市创新高 欧洲经济复苏', url: 'https://www.wallstreetcn.com/articles/2026-03-05/german-stock-high', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_11', title: '美元指数走强 外汇市场波动', url: 'https://xueqiu.com/S/DXY', source: '雪球', publishTime: now.toISOString() },
+      { id: 'fallback_intl_12', title: '韩国股市领涨 半导体板块强劲', url: 'https://www.wallstreetcn.com/articles/2026-03-05/korea-stock-semiconductor', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_13', title: '国际金价上涨 央行购金持续', url: 'https://xueqiu.com/S/XAUUSD', source: '雪球', publishTime: now.toISOString() },
+      { id: 'fallback_intl_14', title: '美债收益率攀升 债券市场承压', url: 'https://www.wallstreetcn.com/articles/2026-03-05/us-bond-yield-rise', source: '华尔街见闻', publishTime: now.toISOString() },
+      { id: 'fallback_intl_15', title: '全球AI热潮持续 科技股领涨', url: 'https://xueqiu.com/S/NVDA', source: '雪球', publishTime: now.toISOString() }
     ];
   }
 }
