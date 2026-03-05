@@ -22,23 +22,100 @@ let newsCache = {
 };
 
 // ============================================
-// 新闻源配置 - 严格限制来源：仅华尔街见闻和雪球
+// 新闻源配置 - 优先华尔街见闻和雪球，失败时自动切换备用源
 // ============================================
 
-// 仅使用华尔街见闻和雪球
+// 反爬检测标志
+let antiCrawlDetected = {
+  wallstreetcn: false,
+  xueqiu: false
+};
+
+// 检测反爬机制
+function isAntiCrawlError(error, response) {
+  // 检测常见的反爬特征
+  if (response) {
+    const status = response.status;
+    const data = response.data || '';
+    const headers = response.headers || {};
+
+    // 状态码检测
+    if (status === 403 || status === 503 || status === 429) {
+      return true;
+    }
+
+    // 内容检测
+    const antiKeywords = ['访问频率过快', '请稍后再试', '验证码', ' captcha', 'block', 'blocked', '限制访问', '禁止访问', 'Forbidden', 'Too Many Requests'];
+    if (typeof data === 'string') {
+      for (const keyword of antiKeywords) {
+        if (data.toLowerCase().includes(keyword.toLowerCase())) {
+          return true;
+        }
+      }
+    }
+
+    // 检查是否返回空内容或错误页面
+    if (data.length < 500 && data.includes('<!DOCTYPE') || data.includes('<html')) {
+      return true;
+    }
+  }
+
+  // 错误信息检测
+  const errorMsg = error.message || '';
+  const antiErrorKeywords = ['403', '503', '429', 'rate limit', 'timeout', 'ECONNREFUSED'];
+  for (const keyword of antiErrorKeywords) {
+    if (errorMsg.toLowerCase().includes(keyword.toLowerCase())) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+// 设置反爬标志
+function setAntiCrawlFlag(source) {
+  if (source.includes('wallstreet') || source.includes('华尔街')) {
+    antiCrawlDetected.wallstreetcn = true;
+    console.log('⚠️ 检测到华尔街见闻反爬机制');
+  }
+  if (source.includes('xueqiu') || source.includes('雪球')) {
+    antiCrawlDetected.xueqiu = true;
+    console.log('⚠️ 检测到雪球反爬机制');
+  }
+}
+
+// 仅使用华尔街见闻和雪球（优先）
 const NEWS_SOURCES = {
-  // 国内新闻 - 仅华尔街见闻和雪球
+  // 国内新闻 - 优先华尔街见闻和雪球
   domestic: [
-    { name: '华尔街见闻', url: 'https://www.wallstreetcn.com/rss', type: 'rss' },
-    { name: '雪球', url: 'https://xueqiu.com/v4/statuses/public_timeline.json', type: 'api' },
-    { name: '华尔街见闻-首页', url: 'https://www.wallstreetcn.com/', type: 'html' },
-    { name: '雪球-财经', url: 'https://xueqiu.com/', type: 'html' }
+    { name: '华尔街见闻', url: 'https://www.wallstreetcn.com/rss', type: 'rss', priority: 1 },
+    { name: '雪球', url: 'https://xueqiu.com/v4/statuses/public_timeline.json', type: 'api', priority: 2 },
+    { name: '华尔街见闻-首页', url: 'https://www.wallstreetcn.com/', type: 'html', priority: 3 },
+    { name: '雪球-财经', url: 'https://xueqiu.com/', type: 'html', priority: 4 }
   ],
-  // 国际新闻 - 同样仅华尔街见闻和雪球
+  // 国际新闻 - 同样优先华尔街见闻和雪球
   international: [
-    { name: '华尔街见闻-全球', url: 'https://www.wallstreetcn.com/rss/global', type: 'rss' },
-    { name: '华尔街见闻-美股', url: 'https://www.wallstreetcn.com/rss/us-stock', type: 'rss' },
-    { name: '雪球-美股', url: 'https://xueqiu.com/hq/usstock', type: 'html' }
+    { name: '华尔街见闻-全球', url: 'https://www.wallstreetcn.com/rss/global', type: 'rss', priority: 1 },
+    { name: '华尔街见闻-美股', url: 'https://www.wallstreetcn.com/rss/us-stock', type: 'rss', priority: 2 },
+    { name: '雪球-美股', url: 'https://xueqiu.com/hq/usstock', type: 'html', priority: 3 }
+  ]
+};
+
+// 备用新闻源（当主源被反爬时使用）
+const FALLBACK_SOURCES = {
+  domestic: [
+    { name: '东方财富-财经', url: 'https://finance.eastmoney.com/a/cywjh.html', type: 'html_eastmoney' },
+    { name: '东方财富-A股', url: 'https://stock.eastmoney.com/a/2020906933.html', type: 'html_eastmoney' },
+    { name: '新浪财经-国内', url: 'https://finance.sina.com.cn/stock/', type: 'html_sina' },
+    { name: '凤凰网-财经', url: 'https://finance.ifeng.com/', type: 'html_ifeng' },
+    { name: '网易财经-国内', url: 'https://money.163.com/', type: 'html_163' },
+    { name: '今日头条-财经', url: 'https://www.toutiao.com/ch/news_hot/', type: 'html_toutiao' }
+  ],
+  international: [
+    { name: '东方财富-美股', url: 'https://stock.eastmoney.com/a/cywjh.html', type: 'html_eastmoney' },
+    { name: '新浪财经-国际', url: 'https://finance.sina.com.cn/stock/', type: 'html_sina' },
+    { name: '凤凰网-国际', url: 'https://finance.ifeng.com/', type: 'html_ifeng' },
+    { name: '网易财经-国际', url: 'https://money.163.com/', type: 'html_163' }
   ]
 };
 
@@ -276,9 +353,18 @@ async function fetchRSS(source) {
       timeout: 8000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'application/rss+xml, application/xml, text/xml'
+        'Accept': 'application/rss+xml, application/xml, text/xml',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Referer': 'https://www.google.com/'
       }
     });
+
+    // 检测反爬
+    if (isAntiCrawlError({}, response)) {
+      setAntiCrawlFlag(source.name);
+      console.log(`⚠️ ${source.name} 触发反爬检测`);
+      return articles;
+    }
 
     const $ = cheerio.load(response.data, { xmlMode: true });
     $('item').each((i, elem) => {
@@ -301,6 +387,10 @@ async function fetchRSS(source) {
     });
   } catch (error) {
     console.log(`RSS ${source.name} 抓取失败: ${error.message}`);
+    // 检测是否是反爬错误
+    if (isAntiCrawlError(error, error.response)) {
+      setAntiCrawlFlag(source.name);
+    }
   }
   return articles;
 }
@@ -314,9 +404,17 @@ async function fetchHTML(source) {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml',
-        'Cookie': 'xq_a_token=test'
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Referer': 'https://www.google.com/'
       }
     });
+
+    // 检测反爬
+    if (isAntiCrawlError({}, response)) {
+      setAntiCrawlFlag(source.name);
+      console.log(`⚠️ ${source.name} 触发反爬检测`);
+      return articles;
+    }
 
     const $ = cheerio.load(response.data);
 
@@ -378,9 +476,17 @@ async function fetchXueqiuAPI(source) {
       timeout: 8000,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Cookie': 'xq_a_token=test'
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Referer': 'https://www.google.com/'
       }
     });
+
+    // 检测反爬
+    if (isAntiCrawlError({}, response)) {
+      setAntiCrawlFlag(source.name);
+      console.log(`⚠️ ${source.name} 触发反爬检测`);
+      return articles;
+    }
 
     if (response.data && response.data.list) {
       response.data.list.forEach((item, i) => {
@@ -396,6 +502,183 @@ async function fetchXueqiuAPI(source) {
     }
   } catch (error) {
     console.log(`雪球API抓取失败: ${error.message}`);
+    if (isAntiCrawlError(error, error.response)) {
+      setAntiCrawlFlag(source.name);
+    }
+  }
+  return articles;
+}
+
+// ============================================
+// 备用源抓取函数 - 东方财富、新浪、凤凰、网易、今日头条
+// ============================================
+
+// 抓取备用新闻源
+async function fetchFallbackSource(source) {
+  const articles = [];
+  try {
+    const response = await axios.get(source.url, {
+      timeout: 10000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'Referer': 'https://www.google.com/'
+      }
+    });
+
+    const $ = cheerio.load(response.data);
+    const now = new Date();
+
+    // 东方财富选择器
+    if (source.type === 'html_eastmoney') {
+      // 尝试多种选择器
+      const selectors = [
+        '.news_list li a', '.artical-list li a', '.list_item a',
+        'div.article a', '.news-item a', 'ul li a[href*="article"]'
+      ];
+      for (const selector of selectors) {
+        $(selector).each((i, elem) => {
+          if (articles.length >= 20) return;
+          const title = $(elem).text().trim();
+          const link = $(elem).attr('href');
+
+          if (title && title.length > 5 && link) {
+            if (!link.startsWith('http')) {
+              link = 'https://finance.eastmoney.com' + link;
+            }
+            articles.push({
+              id: `fallback_${Date.now()}_${i}`,
+              title: title.substring(0, 100),
+              url: link,
+              source: '东方财富',
+              publishTime: now.toISOString()
+            });
+          }
+        });
+        if (articles.length > 0) break;
+      }
+    }
+
+    // 新浪财经选择器
+    if (source.type === 'html_sina') {
+      const selectors = [
+        '.news_item h2 a', '.top_list li a', '.list_009 li a',
+        'div.entry h1 a', '.blk01 h1 a'
+      ];
+      for (const selector of selectors) {
+        $(selector).each((i, elem) => {
+          if (articles.length >= 20) return;
+          const title = $(elem).text().trim();
+          const link = $(elem).attr('href');
+
+          if (title && title.length > 5 && link) {
+            if (!link.startsWith('http')) {
+              link = 'https://finance.sina.com.cn' + link;
+            }
+            articles.push({
+              id: `fallback_${Date.now()}_${i}`,
+              title: title.substring(0, 100),
+              url: link,
+              source: '新浪财经',
+              publishTime: now.toISOString()
+            });
+          }
+        });
+        if (articles.length > 0) break;
+      }
+    }
+
+    // 凤凰网选择器
+    if (source.type === 'html_ifeng') {
+      const selectors = [
+        '.box_01 a', '.news_list li a', '.main_list li a',
+        '.pic_text a', '.list_nonews a'
+      ];
+      for (const selector of selectors) {
+        $(selector).each((i, elem) => {
+          if (articles.length >= 20) return;
+          const title = $(elem).text().trim();
+          const link = $(elem).attr('href');
+
+          if (title && title.length > 5 && link) {
+            if (!link.startsWith('http')) {
+              link = 'https://finance.ifeng.com' + link;
+            }
+            articles.push({
+              id: `fallback_${Date.now()}_${i}`,
+              title: title.substring(0, 100),
+              url: link,
+              source: '凤凰网财经',
+              publishTime: now.toISOString()
+            });
+          }
+        });
+        if (articles.length > 0) break;
+      }
+    }
+
+    // 网易财经选择器
+    if (source.type === 'html_163') {
+      const selectors = [
+        '.news_title h2 a', '.item h3 a', '.post_title a',
+        '.js-item-title a', '.title_area a'
+      ];
+      for (const selector of selectors) {
+        $(selector).each((i, elem) => {
+          if (articles.length >= 20) return;
+          const title = $(elem).text().trim();
+          const link = $(elem).attr('href');
+
+          if (title && title.length > 5 && link) {
+            if (!link.startsWith('http')) {
+              link = 'https://money.163.com' + link;
+            }
+            articles.push({
+              id: `fallback_${Date.now()}_${i}`,
+              title: title.substring(0, 100),
+              url: link,
+              source: '网易财经',
+              publishTime: now.toISOString()
+            });
+          }
+        });
+        if (articles.length > 0) break;
+      }
+    }
+
+    // 今日头条选择器
+    if (source.type === 'html_toutiao') {
+      const selectors = [
+        '.article-title', '.news-title', '.title',
+        'a[href*="article"]', 'h3 a'
+      ];
+      for (const selector of selectors) {
+        $(selector).each((i, elem) => {
+          if (articles.length >= 20) return;
+          const title = $(elem).text().trim();
+          const link = $(elem).attr('href');
+
+          if (title && title.length > 5 && link && link.includes('toutiao.com')) {
+            if (!link.startsWith('http')) {
+              link = 'https://www.toutiao.com' + link;
+            }
+            articles.push({
+              id: `fallback_${Date.now()}_${i}`,
+              title: title.substring(0, 100),
+              url: link,
+              source: '今日头条',
+              publishTime: now.toISOString()
+            });
+          }
+        });
+        if (articles.length > 0) break;
+      }
+    }
+
+    console.log(`✅ 备用源 ${source.name} 获取到 ${articles.length} 条`);
+  } catch (error) {
+    console.log(`备用源 ${source.name} 抓取失败: ${error.message}`);
   }
   return articles;
 }
@@ -455,13 +738,16 @@ function filterAndRank(articles, category) {
 }
 
 // ============================================
-// 抓取国内新闻 - 仅华尔街见闻和雪球
+// 抓取国内新闻 - 优先华尔街见闻和雪球，失败时切换备用源
 // ============================================
 async function fetchDomesticNews() {
-  console.log('🔍 开始抓取国内财经新闻（仅华尔街见闻和雪球）...');
+  console.log('🔍 开始抓取国内财经新闻（优先华尔街见闻和雪球）...');
   let allArticles = [];
 
-  // 抓取华尔街见闻RSS
+  // 重置反爬检测
+  antiCrawlDetected = { wallstreetcn: false, xueqiu: false };
+
+  // 先尝试抓取主源（华尔街见闻和雪球）
   for (const source of NEWS_SOURCES.domestic) {
     if (source.type === 'rss') {
       const articles = await fetchRSS(source);
@@ -486,9 +772,25 @@ async function fetchDomesticNews() {
     }
   }
 
+  // 如果主源数据不足或被反爬，自动切换备用源
+  if (allArticles.length < 5 || antiCrawlDetected.wallstreetcn || antiCrawlDetected.xueqiu) {
+    console.log('⚠️ 主源数据不足或检测到反爬，尝试备用新闻源...');
+
+    for (const source of FALLBACK_SOURCES.domestic) {
+      const articles = await fetchFallbackSource(source);
+      if (articles.length > 0) {
+        allArticles.push(...articles);
+        console.log(`国内 - 备用源 ${source.name} 获取到 ${articles.length} 条`);
+      }
+
+      // 获取到足够数据后停止
+      if (allArticles.length >= 20) break;
+    }
+  }
+
   // 备用数据 - 严格的国内财经新闻
   if (allArticles.length < 5) {
-    console.log('国内新闻数据不足，使用备用数据');
+    console.log('⚠️ 所有源数据不足，使用备用数据');
     allArticles.push(...getFallbackNews('domestic'));
   }
 
@@ -498,13 +800,13 @@ async function fetchDomesticNews() {
 }
 
 // ============================================
-// 抓取国际新闻 - 仅华尔街见闻和雪球
+// 抓取国际新闻 - 优先华尔街见闻和雪球，失败时切换备用源
 // ============================================
 async function fetchInternationalNews() {
-  console.log('🔍 开始抓取国际财经新闻（仅华尔街见闻和雪球）...');
+  console.log('🔍 开始抓取国际财经新闻（优先华尔街见闻和雪球）...');
   let allArticles = [];
 
-  // 抓取华尔街见闻国际RSS
+  // 先尝试抓取主源（华尔街见闻和雪球）
   for (const source of NEWS_SOURCES.international) {
     if (source.type === 'rss') {
       const articles = await fetchRSS(source);
@@ -522,9 +824,25 @@ async function fetchInternationalNews() {
     }
   }
 
+  // 如果主源数据不足或被反爬，自动切换备用源
+  if (allArticles.length < 5 || antiCrawlDetected.wallstreetcn || antiCrawlDetected.xueqiu) {
+    console.log('⚠️ 主源数据不足或检测到反爬，尝试备用新闻源...');
+
+    for (const source of FALLBACK_SOURCES.international) {
+      const articles = await fetchFallbackSource(source);
+      if (articles.length > 0) {
+        allArticles.push(...articles);
+        console.log(`国际 - 备用源 ${source.name} 获取到 ${articles.length} 条`);
+      }
+
+      // 获取到足够数据后停止
+      if (allArticles.length >= 20) break;
+    }
+  }
+
   // 备用数据 - 严格的国际财经新闻
   if (allArticles.length < 5) {
-    console.log('国际新闻数据不足，使用备用数据');
+    console.log('⚠️ 所有源数据不足，使用备用数据');
     allArticles.push(...getFallbackNews('international'));
   }
 
